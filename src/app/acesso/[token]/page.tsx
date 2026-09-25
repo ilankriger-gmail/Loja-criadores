@@ -5,6 +5,7 @@ import { Clock, Download, RefreshCw, XCircle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { chatHistory, lessonsOf, orderByToken, productFull, storeById } from '@/lib/loja/db';
 import { looksLikeToken } from '@/lib/loja/crypto';
+import { emailConfigured } from '@/lib/loja/email';
 import { syncPayment } from '@/lib/loja/orders';
 import { accessState, videoEmbedUrl } from '@/lib/loja/rules';
 import { Avatar, KindTag, Shell, StoreFooter } from '@/components/loja/ui';
@@ -54,7 +55,7 @@ export default async function AccessPage({ params, searchParams }: Props) {
 
   if (!state.ok) {
     const copy = {
-      pending: { icon: Clock, title: 'Pagamento em análise', text: 'Pix costuma cair em segundos; cartão, em até alguns minutos. Esta página libera sozinha quando o pagamento for aprovado.' },
+      pending: { icon: Clock, title: 'Pagamento em análise', text: `Pix costuma cair em segundos; cartão, em até alguns minutos. Esta página libera sozinha quando o pagamento for aprovado${emailConfigured() ? ', e o link também chega no seu e-mail' : ''}.` },
       refunded: { icon: XCircle, title: 'Compra reembolsada', text: 'Este pagamento foi devolvido, então o acesso foi encerrado.' },
       cancelled: { icon: XCircle, title: 'Pagamento não aprovado', text: 'O pagamento foi recusado ou cancelado. Você pode tentar de novo pela página do produto.' },
       expired: { icon: Clock, title: 'Seu acesso terminou', text: 'O período de acesso desta compra acabou. Para continuar, compre de novo pela página do produto.' },
@@ -76,7 +77,7 @@ export default async function AccessPage({ params, searchParams }: Props) {
           </div>
         </section>
         {state.reason === 'pending' && <><SaveLink /><AutoRefresh /></>}
-        <StoreFooter slug={store.slug} />
+        <StoreFooter slug={store.slug} contact={store.support_email} />
       </Shell>
     );
   }
@@ -146,7 +147,7 @@ export default async function AccessPage({ params, searchParams }: Props) {
       {product.ai_enabled && (
         <Chat token={token} storeName={store.name} initial={history} remaining={remaining} tutor={product.kind === 'curso'} />
       )}
-      <StoreFooter slug={store.slug} />
+      <StoreFooter slug={store.slug} contact={store.support_email} />
     </Shell>
   );
 }

@@ -177,3 +177,21 @@ export function safeHttpsUrl(v: string | null | undefined): string | null {
 export function isEmail(v: string): boolean {
   return v.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v);
 }
+
+/**
+ * Limites de tentativas: [máximo, janela em segundos]. Por IP é folgado porque no celular muita
+ * gente sai pelo mesmo IP da operadora (CGNAT); por e-mail é apertado pra ninguém lotar a caixa alheia.
+ */
+export const LIMITS = {
+  'checkout-ip': [30, 600],
+  'checkout-email': [10, 3600],
+  'recuperar-ip': [10, 3600],
+  'recuperar-email': [3, 3600],
+} as const satisfies Record<string, readonly [number, number]>;
+export type LimitKind = keyof typeof LIMITS;
+
+/** IP de quem chamou. Na Vercel x-real-ip e x-forwarded-for são gravados por ela (não dá pra forjar). */
+export function clientIp(headers: { get(name: string): string | null }): string | null {
+  const ip = headers.get('x-real-ip')?.trim() || headers.get('x-forwarded-for')?.split(',')[0]?.trim();
+  return ip && ip.length <= 64 ? ip : null;
+}

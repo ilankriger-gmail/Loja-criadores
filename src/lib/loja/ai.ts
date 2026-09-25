@@ -41,5 +41,8 @@ export async function reply(system: string, history: ChatMessage[], message: str
     messages: [...history, { role: 'user', content: message }],
   });
   if (msg.stop_reason === 'refusal') return 'Não posso ajudar com isso. Quer perguntar outra coisa?';
-  return extractText(msg.content).trim() || 'Não consegui responder agora. Tenta de novo?';
+  const text = extractText(msg.content).trim();
+  // resposta vazia conta como falha: quem chama devolve a mensagem gasta
+  if (!text) throw new Error(`IA sem texto na resposta (${msg.stop_reason})`);
+  return text;
 }

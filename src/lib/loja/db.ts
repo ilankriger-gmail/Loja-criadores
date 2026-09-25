@@ -2,7 +2,7 @@ import 'server-only';
 import { createServiceClient } from '@/lib/supabase/service';
 import { decrypt, encrypt, hashToken } from './crypto';
 import { refreshTokens } from './mercadopago';
-import type { ProductKind } from './rules';
+import { LIMITS, type LimitKind, type ProductKind } from './rules';
 
 // Acesso ao banco da Loja (Supabase, tabelas loja_*). Sempre pela service role: quem chama
 // já conferiu o dono da loja (painel) ou o link de acesso (comprador).
@@ -15,6 +15,7 @@ export interface Store {
   bio: string | null;
   avatar_url: string | null;
   instagram: string | null;
+  support_email: string | null;
   fee_bps: number;
   mp_user_id: string | null;
   mp_connected_at: string | null;
@@ -67,12 +68,13 @@ export interface Order {
   paid_at: string | null;
   expires_at: string | null;
   messages_used: number;
+  access_email_sent_at: string | null;
   created_at: string;
 }
 
 export interface ChatMessage { role: 'user' | 'assistant'; content: string }
 
-const STORE_COLS = 'id, owner_id, slug, name, bio, avatar_url, instagram, fee_bps, mp_user_id, mp_connected_at, created_at';
+const STORE_COLS = 'id, owner_id, slug, name, bio, avatar_url, instagram, support_email, fee_bps, mp_user_id, mp_connected_at, created_at';
 /** Colunas públicas do produto (sem o material da IA nem o link do download). */
 const PRODUCT_PUBLIC_COLS = 'id, store_id, slug, kind, title, headline, description, price_cents, access_days, published, ai_enabled, position, created_at';
 
@@ -85,7 +87,7 @@ function db() {
 function check<T>(res: { data: T; error: { message: string } | null }, what: string): T {
   if (res.error) {
     if (/loja_/.test(res.error.message) && /does not exist|schema cache/.test(res.error.message)) {
-      throw new LojaError('As tabelas da Loja ainda não existem: rode supabase/migration-2026-09-25-loja.sql no Supabase.');
+      throw new LojaError('O banco da Loja está desatualizado: rode os arquivos de supabase/ em ordem no Supabase.');
     }
     throw new Error(`[loja] ${what}: ${res.error.message}`);
   }
@@ -110,7 +112,12 @@ export async function storeById(id: string): Promise<Store | null> {
   return check(await db().from('loja_stores').select(STORE_COLS).eq('id', id).maybeSingle(), 'loja') as Store | null;
 }
 
-export async function createStore(input: { owner_id: string; slug: string; name: string; bio: string | null; fee_bps: number }): Promise<Store> {
+export async function storesByIds(ids: string[]): Promise<Store[]> {
+  if (!ids.length) return [];
+  return check(await db().from('loja_stores').select(STORE_COLS).in('id', ids), 'lojas') as Store[];
+}
+
+export async function createStore(input: Pick<Store, 'owner_id' | 'slug' | 'name' | 'bio' | 'avatar_url' | 'instagram' | 'support_email' | 'fee_bps'>): Promise<Store> {
   const res = await db().from('loja_stores').insert(input).select(STORE_COLS).single();
   if (res.error && /duplicate key/.test(res.error.message)) {
     throw new LojaError(/owner/.test(res.error.message) ? 'Você já tem uma loja.' : 'Esse endereço já é de outra loja. Escolha outro.');
@@ -118,7 +125,7 @@ export async function createStore(input: { owner_id: string; slug: string; name:
   return check(res, 'criar loja') as Store;
 }
 
-export async function updateStore(id: string, patch: Partial<Pick<Store, 'slug' | 'name' | 'bio' | 'avatar_url' | 'instagram'>>): Promise<void> {
+export async function updateStore(id: string, patch: Partial<Pick<Store, 'slug' | 'name' | 'bio' | 'avatar_url' | 'instagram' | 'support_email'>>): Promise<void> {
   const res = await db().from('loja_stores').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id);
   if (res.error && /duplicate key/.test(res.error.message)) throw new LojaError('Esse endereço já é de outra loja. Escolha outro.');
   check(res, 'atualizar loja');
@@ -180,6 +187,12 @@ export async function productFull(id: string): Promise<Product | null> {
   return check(await db().from('loja_products').select('*').eq('id', id).maybeSingle(), 'produto') as Product | null;
 }
 
+/** Vários produtos sem o material da IA (que pode ter centenas de milhares de caracteres). */
+export async function productsByIds(ids: string[]): Promise<Product[]> {
+  if (!ids.length) return [];
+  return check(await db().from('loja_products').select(PRODUCT_PUBLIC_COLS).in('id', ids), 'produtos') as unknown as Product[];
+}
+
 export type ProductWrite = Omit<Product, 'id' | 'store_id' | 'created_at' | 'position'>;
 
 export async function saveProduct(storeId: string, id: string | null, input: ProductWrite): Promise<string> {
@@ -238,8 +251,32 @@ export async function ordersOfStore(storeId: string, limit = 100): Promise<Order
   return check(await db().from('loja_orders').select('*').eq('store_id', storeId).order('created_at', { ascending: false }).limit(limit), 'pedidos') as Order[];
 }
 
+/** Compras pagas de um e-mail, em todas as lojas (pra reenviar os links). */
+export async function paidOrdersOfBuyer(email: string, limit = 50): Promise<Order[]> {
+  return check(await db().from('loja_orders').select('*').eq('buyer_email', email).eq('status', 'paid')
+    .order('created_at', { ascending: false }).limit(limit), 'compras do e-mail') as Order[];
+}
+
 export async function updateOrder(id: string, patch: Partial<Pick<Order, 'status' | 'mp_payment_id' | 'mp_status' | 'paid_at' | 'expires_at'>>): Promise<void> {
   check(await db().from('loja_orders').update(patch).eq('id', id), 'atualizar pedido');
+}
+
+/**
+ * Reserva o envio do e-mail de acesso: marca a hora e devolve o pedido só se estava pago e sem
+ * e-mail. Dois avisos chegando juntos (webhook e volta do checkout) → só um ganha.
+ */
+export async function claimAccessEmail(orderId: string): Promise<Order | null> {
+  return check(await db().from('loja_orders').update({ access_email_sent_at: new Date().toISOString() })
+    .eq('id', orderId).eq('status', 'paid').is('access_email_sent_at', null).select('*').maybeSingle(), 'reservar e-mail') as Order | null;
+}
+
+/** O envio falhou: libera pra tentar de novo no próximo aviso. */
+export async function releaseAccessEmail(orderId: string): Promise<void> {
+  check(await db().from('loja_orders').update({ access_email_sent_at: null }).eq('id', orderId), 'liberar e-mail');
+}
+
+export async function markAccessEmail(orderId: string): Promise<void> {
+  check(await db().from('loja_orders').update({ access_email_sent_at: new Date().toISOString() }).eq('id', orderId), 'marcar e-mail');
 }
 
 /** Gasta uma mensagem da IA. false = acabou o saldo (ou o pedido não está pago). */
@@ -247,6 +284,27 @@ export async function spendMessage(orderId: string, limit: number): Promise<bool
   const res = await db().rpc('loja_use_message', { p_order: orderId, p_limit: limit });
   const data = check(res, 'saldo da IA') as number | number[] | null;
   return Array.isArray(data) ? data.length > 0 : data != null;
+}
+
+/** A IA não respondeu: devolve a mensagem gasta. */
+export async function refundMessage(orderId: string): Promise<void> {
+  check(await db().rpc('loja_refund_message', { p_order: orderId }), 'devolver mensagem da IA');
+}
+
+/**
+ * Conta uma tentativa (IP ou e-mail, guardado só o hash) e diz se ainda está dentro do limite.
+ * Se o banco falhar, deixa passar: limite é proteção extra, não pode derrubar venda.
+ */
+export async function withinLimit(kind: LimitKind, value: string): Promise<boolean> {
+  const [max, windowSeconds] = LIMITS[kind];
+  try {
+    const res = await db().rpc('loja_rate_hit', { p_key: `${kind}:${hashToken(value).slice(0, 32)}`, p_max: max, p_window_seconds: windowSeconds });
+    if (res.error) throw new Error(res.error.message);
+    return res.data !== false;
+  } catch (e) {
+    console.error('[loja] limite de tentativas:', (e as Error).message);
+    return true;
+  }
 }
 
 export async function chatHistory(orderId: string, limit = 40): Promise<ChatMessage[]> {

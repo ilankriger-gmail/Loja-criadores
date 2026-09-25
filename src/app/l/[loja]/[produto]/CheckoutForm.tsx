@@ -67,7 +67,9 @@ export function CheckoutForm({ store, product }: { store: string; product: strin
         {loading ? 'Abrindo o pagamento…' : 'Comprar com Pix ou cartão'}
       </Button>
       <p className="text-center font-mono text-[11px] text-faint">Você volta pra cá com o seu link de acesso.</p>
-      {previous && <a href={previous} className="block text-center text-[13px] text-accent-ink underline">Já comprou neste aparelho? Abrir meu acesso</a>}
+      {previous
+        ? <a href={previous} className="block text-center text-[13px] text-accent-ink underline">Já comprou neste aparelho? Abrir meu acesso</a>
+        : <Link href="/acesso" className="block text-center text-[13px] text-muted underline hover:text-ink">Já comprou? Receber meu link de novo</Link>}
     </form>
   );
 }

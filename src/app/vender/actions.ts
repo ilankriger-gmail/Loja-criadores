@@ -8,6 +8,7 @@ import {
   siteUrl, storeByOwner, updateStore, type Store,
 } from '@/lib/loja/db';
 import { newAccessToken } from '@/lib/loja/crypto';
+import { sendAccessEmail } from '@/lib/loja/email';
 import { grantManually } from '@/lib/loja/orders';
 import {
   clampKnowledge, feeBpsFromEnv, isEmail, isProductKind, parseLessons, parsePriceCents, priceError, safeHttpsUrl, slugError, slugify,
@@ -16,7 +17,7 @@ import {
 // Ações do painel da Loja. Toda ação confere login e pega a loja pelo owner_id de quem está
 // logado: ninguém mexe na loja de outra pessoa, mesmo chamando a ação direto.
 
-export type FormState = { ok?: boolean; error?: string; message?: string };
+export type FormState = { ok?: boolean; error?: string; message?: string; emailed?: boolean };
 
 function text(form: FormData, name: string, max = 500): string {
   const v = form.get(name);
@@ -50,16 +51,14 @@ export async function saveStoreAction(_: FormState, form: FormData): Promise<For
     if (avatar && !avatar_url) return { error: 'A foto precisa ser um link https.' };
     const instagram = text(form, 'instagram', 40).replace(/^@/, '') || null;
     if (instagram && !/^[\w.]{1,30}$/.test(instagram)) return { error: 'Instagram inválido.' };
+    const support_email = text(form, 'support_email', 254).toLowerCase() || null;
+    if (support_email && !isEmail(support_email)) return { error: 'E-mail de atendimento inválido.' };
 
     const existing = await storeByOwner(user.id);
     if (existing) {
-      await updateStore(existing.id, { name, slug, bio, avatar_url, instagram });
+      await updateStore(existing.id, { name, slug, bio, avatar_url, instagram, support_email });
     } else {
-      await createStore({ owner_id: user.id, slug, name, bio, fee_bps: feeBpsFromEnv(process.env.LOJA_TAXA_PERCENT) });
-      if (avatar_url || instagram) {
-        const created = await storeByOwner(user.id);
-        if (created) await updateStore(created.id, { avatar_url, instagram });
-      }
+      await createStore({ owner_id: user.id, slug, name, bio, avatar_url, instagram, support_email, fee_bps: feeBpsFromEnv(process.env.LOJA_TAXA_PERCENT) });
     }
     revalidatePath('/vender');
     return { ok: true, message: 'Loja salva.' };
@@ -155,9 +154,24 @@ export async function grantOrderAction(orderId: string): Promise<FormState> {
     if (!order || order.store_id !== store.id) return { error: 'Pedido não encontrado.' };
     if (order.status === 'paid') return { ok: true };
     const product = await productFull(order.product_id);
-    await grantManually(order, product?.access_days ?? null);
+    const emailed = await grantManually(order, product?.access_days ?? null);
     revalidatePath('/vender');
-    return { ok: true };
+    return { ok: true, emailed };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** Manda de novo o e-mail com o link de acesso (a pessoa não achou, caiu no spam…). */
+export async function resendAccessEmailAction(orderId: string): Promise<FormState> {
+  try {
+    const store = await myStore();
+    const order = await orderById(orderId);
+    if (!order || order.store_id !== store.id) return { error: 'Pedido não encontrado.' };
+    if (order.status !== 'paid') return { error: 'Só dá pra reenviar o acesso de pedido pago.' };
+    if (!(await sendAccessEmail(order.id, { force: true }))) return { error: 'O e-mail não saiu. Copie o link e mande pra pessoa.' };
+    revalidatePath('/vender');
+    return { ok: true, message: 'E-mail enviado.' };
   } catch (e) {
     return fail(e);
   }
@@ -177,9 +191,9 @@ export async function giftAction(_: FormState, form: FormData): Promise<FormStat
       store_id: store.id, product_id: product.id, buyer_email: email, buyer_name: text(form, 'name', 120) || null,
       amount_cents: 0, fee_cents: 0, access_token: token, source: 'manual',
     });
-    await grantManually(order, product.access_days);
+    const emailed = await grantManually(order, product.access_days);
     revalidatePath('/vender');
-    return { ok: true, message: `${siteUrl()}/acesso/${token}` };
+    return { ok: true, message: `${siteUrl()}/acesso/${token}`, emailed };
   } catch (e) {
     return fail(e);
   }

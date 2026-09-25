@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { appendChat, chatHistory, orderByToken, productFull, storeById, spendMessage } from '@/lib/loja/db';
+import { appendChat, chatHistory, orderByToken, productFull, refundMessage, storeById, spendMessage } from '@/lib/loja/db';
 import { looksLikeToken } from '@/lib/loja/crypto';
 import { MAX_USER_MESSAGE, reply, systemPrompt } from '@/lib/loja/ai';
 import { accessState } from '@/lib/loja/rules';
@@ -22,8 +22,14 @@ export async function POST(request: NextRequest) {
     if (!(await spendMessage(order.id, product.ai_messages_limit))) {
       return NextResponse.json({ error: 'Você usou todas as mensagens deste acesso.' }, { status: 429 });
     }
-    const history = await chatHistory(order.id, 20);
-    const answer = await reply(systemPrompt(store, product), history, message);
+    let answer: string;
+    try {
+      answer = await reply(systemPrompt(store, product), await chatHistory(order.id, 20), message);
+    } catch (e) {
+      // a IA falhou depois de gastar o saldo: devolve a mensagem antes de avisar o comprador
+      await refundMessage(order.id).catch((err) => console.error('[loja] devolver mensagem:', (err as Error).message));
+      throw e;
+    }
     await appendChat(order.id, [{ role: 'user', content: message }, { role: 'assistant', content: answer }]);
     return NextResponse.json({ reply: answer, remaining: Math.max(0, product.ai_messages_limit - order.messages_used - 1) });
   } catch (e) {

@@ -90,7 +90,7 @@ export default async function ProductPage({ params }: Params) {
           </div>
         </aside>
       </div>
-      <StoreFooter slug={store.slug} />
+      <StoreFooter slug={store.slug} contact={store.support_email} />
     </Shell>
   );
 }

@@ -32,11 +32,13 @@ export function KindTag({ kind, className }: { kind: ProductKind; className?: st
   );
 }
 
-export function StoreFooter({ slug }: { slug?: string }) {
+/** Rodapé das páginas públicas. `contact` = e-mail de atendimento da loja, quando o criador preencheu. */
+export function StoreFooter({ slug, contact }: { slug?: string; contact?: string | null }) {
   return (
     <footer className="mt-16 border-t border-line pt-6 text-center font-mono text-[11.5px] text-faint">
+      {contact && <p className="mb-2">Dúvidas? <a href={`mailto:${contact}`} className="text-ink-2 underline hover:text-ink">{contact}</a></p>}
       {slug && <><Link href={`/l/${slug}`} className="hover:text-ink">Voltar à loja</Link> · </>}
-      Pagamento seguro pelo Mercado Pago (Pix e cartão) · <Link href="/termos" className="hover:text-ink">Termos</Link> · <Link href="/privacidade" className="hover:text-ink">Privacidade</Link>
+      Pagamento seguro pelo Mercado Pago (Pix e cartão) · <Link href="/acesso" className="hover:text-ink">Recuperar acesso</Link> · <Link href="/termos" className="hover:text-ink">Termos</Link> · <Link href="/privacidade" className="hover:text-ink">Privacidade</Link>
     </footer>
   );
 }

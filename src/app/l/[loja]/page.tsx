@@ -48,7 +48,7 @@ export default async function StorePage({ params }: Params) {
           </Link>
         ))}
       </section>
-      <StoreFooter />
+      <StoreFooter contact={store.support_email} />
     </Shell>
   );
 }

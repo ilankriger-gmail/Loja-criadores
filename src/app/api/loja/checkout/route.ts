@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createOrder, LojaError, productBySlug, sellerAccessToken, setOrderPreference, siteUrl, storeBySlug, updateOrder } from '@/lib/loja/db';
+import {
+  createOrder, LojaError, productBySlug, sellerAccessToken, setOrderPreference, siteUrl, storeBySlug, updateOrder, withinLimit,
+} from '@/lib/loja/db';
 import { newAccessToken } from '@/lib/loja/crypto';
 import { createPreference, MercadoPagoError, mpConfigured } from '@/lib/loja/mercadopago';
-import { feeCents, isEmail } from '@/lib/loja/rules';
+import { clientIp, feeCents, isEmail } from '@/lib/loja/rules';
 
 /**
  * Começa uma compra: cria o pedido (pendente) e a preferência do Checkout Pro na conta do
  * criador, com a taxa da plataforma em marketplace_fee. Devolve o endereço do pagamento.
- * O preço vem sempre do banco, nunca do navegador.
+ * O preço vem sempre do banco, nunca do navegador. Tentativas limitadas por IP e por e-mail
+ * (cada uma cria pedido e preferência na conta do criador).
  */
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({})) as Record<string, unknown>;
@@ -18,6 +21,10 @@ export async function POST(request: NextRequest) {
   if (body.consent !== true) return NextResponse.json({ error: 'Aceite os termos para continuar.' }, { status: 400 });
 
   try {
+    const ip = clientIp(request.headers);
+    const [ipOk, emailOk] = await Promise.all([ip ? withinLimit('checkout-ip', ip) : true, withinLimit('checkout-email', email)]);
+    if (!ipOk || !emailOk) return NextResponse.json({ error: 'Muitas tentativas seguidas. Espere alguns minutos e tente de novo.' }, { status: 429 });
+
     const store = await storeBySlug(str('store', 60));
     const product = store ? await productBySlug(store.id, str('product', 60)) : null;
     if (!store || !product || !product.published) return NextResponse.json({ error: 'Produto não encontrado.' }, { status: 404 });

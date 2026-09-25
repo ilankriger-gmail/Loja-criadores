@@ -3,10 +3,11 @@ import { ExternalLink, Plus } from 'lucide-react';
 import { currentSeller } from '@/lib/loja/auth';
 import { LojaError, ordersOfStore, productsOfStore, siteUrl, storeByOwner, type Order, type Product } from '@/lib/loja/db';
 import { decrypt } from '@/lib/loja/crypto';
+import { emailConfigured } from '@/lib/loja/email';
 import { mpConfigured } from '@/lib/loja/mercadopago';
 import { formatBRL, KIND_LABEL } from '@/lib/loja/rules';
 import { Card, CardHead, PageHeader, StateChip } from '@/components/loja/panel';
-import { CopyButton, DeleteProduct, DisconnectMp, GiftForm, GrantOrder, StoreForm } from './forms';
+import { CopyButton, DeleteProduct, DisconnectMp, GiftForm, GrantOrder, ResendEmail, StoreForm } from './forms';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,6 +54,7 @@ export default async function SellerPage({ searchParams }: Props) {
   const storeUrl = `${site}/l/${store.slug}`;
   const notice = sp.mp ? MP_NOTICE[sp.mp] : null;
   const canSell = mpConfigured() && store.mp_connected_at;
+  const mail = emailConfigured();
 
   return (
     <div className="space-y-6">
@@ -112,6 +114,11 @@ export default async function SellerPage({ searchParams }: Props) {
 
       <Card>
         <CardHead title="Pedidos" right={`${orders.length} mais recentes`} />
+        <p className="-mt-1 mb-3 text-[12.5px] text-muted">
+          {mail
+            ? 'Cada comprador recebe o link de acesso por e-mail assim que o pagamento é aprovado.'
+            : 'O envio automático do link por e-mail ainda está desligado na plataforma: copie o link do pedido e mande pra pessoa.'}
+        </p>
         {orders.length === 0 ? <p className="text-[14px] text-muted">Nenhum pedido ainda.</p> : (
           <div className="-mx-4 overflow-x-auto px-4">
             <table className="w-full min-w-[640px] text-left text-[13.5px]">
@@ -119,7 +126,7 @@ export default async function SellerPage({ searchParams }: Props) {
                 <tr><th className="py-2 pr-3 font-medium">Quando</th><th className="py-2 pr-3 font-medium">Comprador</th><th className="py-2 pr-3 font-medium">Produto</th><th className="py-2 pr-3 text-right font-medium">Valor</th><th className="py-2 pr-3 font-medium">Status</th><th className="py-2 font-medium">Acesso</th></tr>
               </thead>
               <tbody className="divide-y divide-line">
-                {orders.map((o) => <OrderRow key={o.id} order={o} product={byId.get(o.product_id)} site={site} />)}
+                {orders.map((o) => <OrderRow key={o.id} order={o} product={byId.get(o.product_id)} site={site} mail={mail} />)}
               </tbody>
             </table>
           </div>
@@ -152,7 +159,7 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
   );
 }
 
-function OrderRow({ order: o, product, site }: { order: Order; product?: Product; site: string }) {
+function OrderRow({ order: o, product, site, mail }: { order: Order; product?: Product; site: string; mail: boolean }) {
   let link: string | null = null;
   try { link = `${site}/acesso/${decrypt(o.access_token_enc)}`; } catch { link = null; }
   return (
@@ -162,7 +169,7 @@ function OrderRow({ order: o, product, site }: { order: Order; product?: Product
       <td className="py-2 pr-3"><span className="block max-w-[180px] truncate">{product?.title ?? '—'}</span></td>
       <td className="py-2 pr-3 text-right tabular-nums">{o.source === 'manual' && o.amount_cents === 0 ? 'cortesia' : formatBRL(o.amount_cents)}</td>
       <td className="py-2 pr-3"><StateChip tone={ORDER_TONE[o.status]}>{ORDER_LABEL[o.status]}</StateChip></td>
-      <td className="py-2"><span className="flex gap-1.5">{o.status === 'paid' && link && <CopyButton text={link} />}{o.status === 'pending' && <GrantOrder id={o.id} />}</span></td>
+      <td className="py-2"><span className="flex flex-wrap items-center gap-1.5">{o.status === 'paid' && link && <CopyButton text={link} />}{o.status === 'paid' && mail && <ResendEmail id={o.id} sentAt={o.access_email_sent_at} />}{o.status === 'pending' && <GrantOrder id={o.id} />}</span></td>
     </tr>
   );
 }

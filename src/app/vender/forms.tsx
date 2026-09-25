@@ -1,10 +1,12 @@
 'use client';
 
 import { useActionState, useState, useTransition } from 'react';
-import { Check, Copy, Loader2, Trash2 } from 'lucide-react';
+import { Check, Copy, Loader2, Mail, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils';
-import { deleteProductAction, disconnectMpAction, giftAction, grantOrderAction, saveStoreAction, type FormState } from './actions';
+import {
+  deleteProductAction, disconnectMpAction, giftAction, grantOrderAction, resendAccessEmailAction, saveStoreAction, type FormState,
+} from './actions';
 
 export const inputCls = 'w-full rounded-lg border border-line bg-raised px-3 py-2 text-[14.5px] text-ink placeholder:text-faint focus:border-accent-ink focus:outline-none';
 
@@ -24,7 +26,7 @@ export function FormMessage({ state }: { state: FormState }) {
   return null;
 }
 
-type StoreValues = { name: string; slug: string; bio: string | null; avatar_url: string | null; instagram: string | null };
+type StoreValues = { name: string; slug: string; bio: string | null; avatar_url: string | null; instagram: string | null; support_email: string | null };
 
 export function StoreForm({ store, site }: { store: StoreValues | null; site: string }) {
   const [state, action, pending] = useActionState(saveStoreAction, {});
@@ -43,6 +45,9 @@ export function StoreForm({ store, site }: { store: StoreValues | null; site: st
         <Field label="Foto (link https)"><input name="avatar_url" maxLength={500} defaultValue={store?.avatar_url ?? ''} className={inputCls} placeholder="https://…" /></Field>
         <Field label="Instagram"><input name="instagram" maxLength={40} defaultValue={store?.instagram ?? ''} className={inputCls} placeholder="@seuperfil" /></Field>
       </div>
+      <Field label="E-mail de atendimento (opcional)" hint="Aparece pro comprador na página do produto e recebe as respostas do e-mail de acesso.">
+        <input name="support_email" type="email" maxLength={254} defaultValue={store?.support_email ?? ''} className={inputCls} placeholder="contato@seudominio.com" />
+      </Field>
       <FormMessage state={state} />
       <Button type="submit" disabled={pending}>{pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{store ? 'Salvar loja' : 'Criar minha loja'}</Button>
     </form>
@@ -88,6 +93,23 @@ export function GrantOrder({ id }: { id: string }) {
   );
 }
 
+export function ResendEmail({ id, sentAt }: { id: string; sentAt: string | null }) {
+  const [pending, start] = useTransition();
+  const [result, setResult] = useState<FormState | null>(null);
+  const when = sentAt ? new Date(sentAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : null;
+  return (
+    <>
+      <button type="button" disabled={pending} title={when ? `E-mail com o link enviado em ${when}` : 'O e-mail com o link ainda não saiu'}
+        onClick={() => start(async () => setResult(await resendAccessEmailAction(id)))}
+        className="inline-flex items-center gap-1.5 rounded-md border border-line px-2 py-1 font-mono text-[11.5px] text-ink hover:bg-raised disabled:opacity-50">
+        {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : result?.ok ? <Check className="h-3.5 w-3.5 text-ok" /> : <Mail className={cn('h-3.5 w-3.5', !sentAt && 'text-warn')} />}
+        {result?.ok ? 'Enviado' : sentAt ? 'Reenviar' : 'Enviar'}
+      </button>
+      {result?.error && <span role="alert" className="text-[12px] text-crit">{result.error}</span>}
+    </>
+  );
+}
+
 export function GiftForm({ products }: { products: { id: string; title: string }[] }) {
   const [state, action, pending] = useActionState(giftAction, {});
   return (
@@ -105,7 +127,7 @@ export function GiftForm({ products }: { products: { id: string; title: string }
       {state.error && <FormMessage state={state} />}
       {state.ok && state.message && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg bg-ok/12 px-3 py-2 text-[13px] text-ok">
-          Acesso criado. Mande este link pra pessoa: <code className="break-all font-mono text-[12px] text-ink">{state.message}</code> <CopyButton text={state.message} />
+          {state.emailed ? 'Acesso criado e enviado por e-mail. O link, se quiser mandar por outro canal:' : 'Acesso criado. Mande este link pra pessoa:'} <code className="break-all font-mono text-[12px] text-ink">{state.message}</code> <CopyButton text={state.message} />
         </div>
       )}
     </form>

@@ -1,12 +1,14 @@
 import 'server-only';
 import { orderById, productFull, sellerAccessToken, updateOrder, type Order } from './db';
+import { sendAccessEmail } from './email';
 import { getPayment, orderStatusFor } from './mercadopago';
 import { expiresAtFrom } from './rules';
 
 /**
  * Busca o pagamento no Mercado Pago (com o token do criador) e atualiza o pedido.
  * O webhook só diz "olhe o pagamento X": quem decide é a resposta da API, então um aviso
- * falso não libera nada. Confere pedido, valor e moeda antes de liberar o acesso.
+ * falso não libera nada. Confere pedido, valor e moeda antes de liberar o acesso. Pedido pago
+ * que ainda não recebeu o e-mail com o link recebe agora (o próximo aviso tenta de novo se falhar).
  */
 export async function syncPayment(storeId: string, paymentId: string): Promise<Order | null> {
   const token = await sellerAccessToken(storeId);
@@ -38,15 +40,18 @@ export async function syncPayment(storeId: string, paymentId: string): Promise<O
   }
 
   await updateOrder(order.id, patch);
-  return { ...order, ...patch } as Order;
+  const updated = { ...order, ...patch } as Order;
+  if (updated.status === 'paid' && !updated.access_email_sent_at) await sendAccessEmail(order.id);
+  return updated;
 }
 
-/** Venda fora do Mercado Pago (Pix direto, cortesia): o criador libera na mão. */
-export async function grantManually(order: Order, accessDays: number | null): Promise<void> {
+/** Venda fora do Mercado Pago (Pix direto, cortesia): o criador libera na mão. true = e-mail enviado. */
+export async function grantManually(order: Order, accessDays: number | null): Promise<boolean> {
   const now = new Date();
   await updateOrder(order.id, {
     status: 'paid',
     paid_at: now.toISOString(),
     expires_at: expiresAtFrom(now, accessDays)?.toISOString() ?? null,
   });
+  return sendAccessEmail(order.id);
 }

@@ -104,7 +104,7 @@ alter table public.loja_chat_messages enable row level security;
 
 -- Gasta uma mensagem da IA só se ainda houver saldo (atômico: dois cliques não passam do limite).
 create or replace function public.loja_use_message(p_order uuid, p_limit int)
-returns int language sql as $$
+returns int language sql set search_path = '' as $$
   update public.loja_orders set messages_used = messages_used + 1
   where id = p_order and status = 'paid' and messages_used < p_limit
   returning messages_used;

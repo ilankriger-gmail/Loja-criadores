@@ -39,7 +39,7 @@ padrão 5%, `LOJA_TAXA_PERCENT`). Acesso por tempo (`access_days`) ou pra sempre
 
 ## Configurar (uma vez)
 
-1. Criar um projeto novo no Supabase só pra Loja e rodar `supabase/001-loja.sql` no SQL Editor.
+1. Criar um projeto novo no Supabase só pra Loja e rodar os arquivos de `supabase/` em ordem no SQL Editor.
    Em *Authentication*, ligar Google (opcional) e pôr `https://SEU-DOMINIO/api/auth/callback` nas
    *Redirect URLs*.
 2. Mercado Pago Developers → **Suas integrações → Criar aplicação** (Pagamentos online, Checkout Pro,

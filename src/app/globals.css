@@ -1,0 +1,127 @@
+@import "tailwindcss";
+
+/* Sistema visual da Loja (herdado do Acervo Studio).
+   Um acento só: o vermelho do te amo (#DC2626) marca o que é seu e o que pede ação;
+   o coral da marca (brand-*) fica para destaques. Neutros quentes no escuro.
+   Cada rede tem cor fixa nos gráficos e sempre um rótulo escrito ao lado. */
+@theme {
+  --color-brand-100: #ffe6e0;
+  --color-brand-200: #ffc9bd;
+  --color-brand-300: #ffa38f;
+  --color-brand-400: #ff7d63;
+  --color-brand-500: #f45a3f;
+  --color-brand-600: #d8442c;
+  --color-brand-700: #b23421;
+  --color-brand-800: #7f2517;
+  --color-brand-900: #4d160d;
+
+  --color-bg: #0b0909;
+  --color-surface: #151112;
+  --color-raised: #1f191a;
+  --color-line: #2e2627;
+  --color-line-strong: #40383a;
+  --color-ink: #f2ece8;
+  --color-ink-2: #d9d0cb;
+  --color-muted: #a69a93;
+  --color-faint: #6e6461;
+
+  /* vermelho te amo; accent-ink é o mesmo vermelho clareado para texto sobre o escuro */
+  --color-accent: #dc2626;
+  --color-accent-ink: #ff6b5e;
+  --color-accent-soft: rgb(220 38 38 / 0.14);
+
+  --color-ok: #5bd27f;
+  --color-warn: #f5b14c;
+  --color-crit: #ff6b6b;
+  --color-info: #9db8e4;
+
+  --color-ig: #ff7a9a;
+  --color-tt: #5ed6e8;
+  --color-yt: #f2c14e;
+  --color-fb: #7aa2ff;
+  --color-kw: #ff9f43;
+
+  /* cinzas quentes no lugar do cinza frio do Tailwind (vale para as telas antigas também) */
+  --color-gray-50: #faf7f5;
+  --color-gray-100: #f2ece8;
+  --color-gray-200: #e3dad5;
+  --color-gray-300: #cfc4be;
+  --color-gray-400: #a69a93;
+  --color-gray-500: #7f7470;
+  --color-gray-600: #5c5351;
+  --color-gray-700: #40383a;
+  --color-gray-800: #2e2627;
+  --color-gray-900: #1f191a;
+  --color-gray-950: #0b0909;
+
+  --font-display: var(--font-bricolage), "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-geist), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html {
+  background-color: var(--color-bg);
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Números grandes e títulos: display com dígitos alinhados */
+.font-display { font-family: var(--font-display); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.num { font-variant-numeric: tabular-nums; }
+
+/* Rótulo de seção: mono, caixa alta, espaçado (como nos mockups) */
+.eyebrow { font-family: var(--font-mono); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-muted); }
+
+:focus-visible { outline: 2px solid var(--color-accent-ink); outline-offset: 2px; }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(242, 236, 232, 0.12); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(242, 236, 232, 0.22); }
+
+::selection { background: rgba(220, 38, 38, 0.4); color: white; }
+
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes shimmer {
+  0% { background-position: -1000px 0; }
+  100% { background-position: 1000px 0; }
+}
+.animate-fade-in-up { animation: fadeInUp 0.3s ease-out; }
+.animate-shimmer {
+  animation: shimmer 2s linear infinite;
+  background: linear-gradient(to right, transparent 0%, rgba(255,255,255,0.05) 50%, transparent 100%);
+  background-size: 1000px 100%;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in-up, .animate-shimmer { animation: none; }
+}
+
+.line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+@media print {
+  body { background: white; color: black; }
+  .no-print { display: none !important; }
+}
+
+/* Texto em markdown das páginas da Loja (descrição do produto, aulas, conversa com a IA) */
+.prose-loja a { color: var(--color-accent-ink); text-decoration: underline; }
+.prose-loja ul { list-style: disc; padding-left: 1.25rem; }
+.prose-loja ol { list-style: decimal; padding-left: 1.25rem; }
+.prose-loja strong { color: var(--color-ink); }
+.prose-loja h1, .prose-loja h2, .prose-loja h3 { font-family: var(--font-display); color: var(--color-ink); font-weight: 700; margin-top: 1.25rem; }
+.prose-loja > * + * { margin-top: 0.75rem; }
